@@ -1,0 +1,129 @@
+# Automerge configuration. Copy to `automerge.yaml` and adjust.
+#
+#   cp automerge.example.yaml automerge.yaml
+#
+# Credentials are NOT here: they are read from the environment (see .env.example).
+
+# The bot's own bookkeeping. There is NO name to set here: every comment and
+# every merge is attributed by Bitbucket to whoever owns the credentials -- the
+# access token's name, or the display name of the dedicated account (README
+# section 4). The bot cannot choose how it is announced, so what it writes says
+# `automerge`, which is what it does, instead of repeating a name that could
+# only disagree with the one Bitbucket prints above it.
+#
+# What genuinely DOES hang off a name is configurable: the title markers that
+# keep the bot away (`checks.skip_title_markers` below), and the namespace of
+# its own marker (here).
+bot:
+  # Namespace of the invisible marker every comment carries
+  # (`<!-- automerge:v1 key=... -->`, README section 6). That marker is the whole
+  # of the bot's memory, so CHANGING IT ON A LIVE REPOSITORY MAKES IT FORGET:
+  # every requirement comment is written a second time and the old checklist is
+  # orphaned instead of edited. Change it only to run two bots side by side on
+  # the same pull requests.
+  marker: automerge
+
+# The repository the bot merges. Both come from its URL:
+# https://bitbucket.org/<workspace>/<repository>/ -- the slugs in the URL, not
+# the display names, and not the name of the local folder.
+bitbucket:
+  workspace: mi-workspace
+  repository: mi-repositorio
+  base_url: https://api.bitbucket.org/2.0
+  timeout: 30
+  max_retries: 3
+
+# Branches the bot may merge into. Anything not listed here is left alone.
+targets:
+  # Everyday work: any branch into `develop`, with full code owner coverage.
+  - branch: develop
+
+  # Promotion to preproduction. DISABLED for now: uncomment to let the bot merge
+  # `develop` into `stg` as well. `stg` is only ever fed from `develop`, and
+  # what it carries was already reviewed by its owners on the way into
+  # `develop` -- so owner coverage is not demanded again, but the manually
+  # triggered E2E suite is. Empty
+  # `required_pipelines` if the E2E is not going to gate the promotion.
+  # - branch: stg
+  #   from: [develop]
+  #   require_codeowners: false
+  #   min_approvals: 1
+  #   required_pipelines: [e2e]
+
+# Branches the bot must never merge into, whatever `targets` says. `main` is
+# production: that promotion is made by a person.
+manual_only_branches: [main]
+
+# Where the rules are read from. The bot does NOT need to live in the repository
+# it merges: by default it reads these two files through the API, from the
+# destination branch of each pull request -- the same place Bitbucket reads them.
+owners:
+  codeowners_path: .bitbucket/CODEOWNERS
+  teams_path: .bitbucket/teams.yaml
+  # destination -> the branch the pull request targets, in the merged repository
+  # repository  -> the fixed `repository` / `ref` below, for a bot hosted
+  #                elsewhere or rules centralised in another repository
+  # local       -> the working copy, for testing without the API
+  read_from: destination
+  repository: ""       # "workspace/repo-slug"; empty = the merged repository
+  ref: ""              # branch or commit; empty = the PR's destination branch
+  local_root: ..       # only used by read_from: local
+
+rules:
+  # `any`: one approval from any owner listed on the matching CODEOWNERS line.
+  # `all`: when a line lists two teams (`@teams/testing @teams/backend`),
+  #        each of them needs an approval of its own.
+  multi_owner_mode: any
+  # A team of one cannot review its own owner's work: any approval from someone
+  # other than the author covers what that team owns.
+  single_owner_fallback: true
+  # Same for files no CODEOWNERS rule claims, or whose team is undeclared/empty.
+  unowned_fallback: true
+  # At least one approver other than the author.
+  min_approvals: 1
+  author_can_approve: false
+
+checks:
+  require_pipeline: true
+  # Empty = whatever ran on that commit must be green. Add names to demand a
+  # specific run, e.g. ["pull-requests"].
+  required_pipelines: []
+  block_on_open_tasks: true
+  block_on_changes_requested: true
+  block_on_draft: true
+  # Say what should not happen, not who should not do it: `[no-automerge]` keeps
+  # working whatever the account writing the comments is called.
+  skip_title_markers: ["[wip]", "wip:", "[no-automerge]"]
+
+merge:
+  enabled: true
+  # One of merge_commit / squash / fast_forward. `merge_commit` keeps the branch
+  # history, like the merges already in the repository.
+  strategy: merge_commit
+  close_source_branch: true
+
+comments:
+  per_requirement: true    # one comment the first time each requirement is met
+  status_summary: true     # a single checklist comment, edited in place
+  on_merge: true
+  on_failure: true
+
+identity:
+  # How a `teams.yaml` email is matched to a Bitbucket account. The API never
+  # returns emails, so this is a best effort; anything unmatched is treated as
+  # "did not approve", never as an approval.
+  #   nickname         -> the @handle in teams.yaml equals the Bitbucket nickname
+  #   email-local-part -> nickname equals the part before the @ of the email
+  #   initial+surname  -> jperez@example.com is "Juana Pérez" (this workspace's habit)
+  heuristics: [nickname, email-local-part, initial+surname]
+  # Exact mapping. Anything listed here wins over every heuristic, and is the
+  # right fix when a person's account cannot be derived from their email.
+  map: []
+  # - email: jperez@example.com
+  #   uuid: "{00000000-0000-0000-0000-000000000000}"
+  #   nickname: jperez
+  #   display_name: Juana Pérez
+
+# CODEOWNERS may reference workspace groups (`@workspace/group`). The API cannot
+# expand them, so their members are declared here when they are used.
+workspace_groups: {}
