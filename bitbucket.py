@@ -17,9 +17,9 @@ import requests
 
 LOG = logging.getLogger("automerge.bitbucket")
 
-#: Statuses a pipeline run can end in, grouped by what they mean for the merge.
+#: Statuses a pipeline run can end in. There is deliberately no list of the
+#: states that mean "still going": anything that is not SUCCESSFUL blocks.
 PIPELINE_SUCCESS = "SUCCESSFUL"
-PIPELINE_RUNNING = ("PENDING", "BUILDING", "IN_PROGRESS", "PAUSED", "HALTED")
 PIPELINE_FAILED = ("FAILED", "ERROR", "STOPPED", "EXPIRED", "SKIPPED")
 
 
