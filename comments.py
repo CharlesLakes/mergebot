@@ -287,7 +287,9 @@ def pipeline_detail_es(status: PipelineStatus) -> str:
     if status.state == STATE_FAILED:
         return "falló: {}".format(", ".join(run.label for run in status.failed_runs))
     if status.state == STATE_RUNNING:
-        return "en ejecución: {}".format(", ".join(run.label for run in status.running_runs))
+        return "todavía no está en verde: {}".format(
+            ", ".join("{} [{}]".format(run.label, run.result)
+                      for run in status.pending_runs))
     if not status.runs:
         return "verificación de pipeline desactivada en la configuración"
     return "todas las corridas del commit `{}` en verde".format(commit)

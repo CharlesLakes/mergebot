@@ -24,8 +24,7 @@ import logging
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Sequence
 
-from bitbucket import (PIPELINE_FAILED, PIPELINE_RUNNING, PIPELINE_SUCCESS,
-                       BitbucketClient)
+from bitbucket import PIPELINE_FAILED, PIPELINE_SUCCESS, BitbucketClient
 
 LOG = logging.getLogger("automerge.pipelines")
 
@@ -59,10 +58,6 @@ class PipelineRun:
         return self.result == PIPELINE_SUCCESS
 
     @property
-    def is_running(self) -> bool:
-        return self.result in PIPELINE_RUNNING
-
-    @property
     def is_failed(self) -> bool:
         return self.result in PIPELINE_FAILED
 
@@ -89,8 +84,10 @@ class PipelineStatus:
         return [run for run in self.runs if run.is_failed]
 
     @property
-    def running_runs(self) -> List[PipelineRun]:
-        return [run for run in self.runs if run.is_running]
+    def pending_runs(self) -> List[PipelineRun]:
+        """Not green and not failed: still going, or in a state we do not know."""
+        return [run for run in self.runs
+                if not run.is_successful and not run.is_failed]
 
 
 class PipelineGate:
@@ -148,11 +145,16 @@ class PipelineGate:
                                   detail="failed: {}".format(
                                       ", ".join(run.label for run in failed)))
 
-        running = [run for run in latest if run.is_running]
-        if running:
+        # Only SUCCESSFUL opens the gate. Reading "not failed" as green is how a
+        # commit got merged while its pipeline was still building: Bitbucket
+        # reports an in-progress run as `state.stage.name = RUNNING`, and no list
+        # of non-terminal states is ever complete.
+        pending = [run for run in latest if not run.is_successful and not run.is_failed]
+        if pending:
             return PipelineStatus(state=STATE_RUNNING, commit=commit_hash, runs=latest,
-                                  detail="still running: {}".format(
-                                      ", ".join(run.label for run in running)))
+                                  detail="not green yet: {}".format(
+                                      ", ".join("{} [{}]".format(run.label, run.result)
+                                                for run in pending)))
 
         return PipelineStatus(state=STATE_SUCCESS, commit=commit_hash, runs=latest,
                               detail="all runs green on {}".format(commit_hash[:12]))
